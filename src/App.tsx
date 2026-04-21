@@ -263,6 +263,10 @@ export default function App() {
     setCashStr(parsedCash.toLocaleString(undefined, { maximumFractionDigits: 2 }))
   }, [cashStr])
 
+  const removeHolding = useCallback((id: string) => {
+    setHoldings((prev) => prev.filter((h) => h.id !== id))
+  }, [])
+
   const startEdit = useCallback((h: Holding) => {
     setEditingId(h.id)
     setEditSharesStr(String(h.shares))
@@ -547,6 +551,14 @@ export default function App() {
                                   aria-label={`Edit ${h.symbol}`}
                                 >
                                   Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn ghost danger"
+                                  onClick={() => removeHolding(h.id)}
+                                  aria-label={`Delete ${h.symbol}`}
+                                >
+                                  Delete
                                 </button>
                               </>
                             )}
