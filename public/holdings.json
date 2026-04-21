@@ -1,5 +1,5 @@
 [
-  { "symbol": "VTI", "shares": 25 },
-  { "symbol": "VXUS", "shares": 40 },
-  { "symbol": "BND", "shares": 60 }
+  { "symbol": "VTI", "shares": 25, "averageCost": 245.2 },
+  { "symbol": "VXUS", "shares": 40, "averageCost": 58.75 },
+  { "symbol": "BND", "shares": 60, "averageCost": 71.1 }
 ]

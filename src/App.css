@@ -1,7 +1,7 @@
 .app {
   text-align: left;
   padding: 2rem 1.25rem 3rem;
-  max-width: 1080px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -17,34 +17,15 @@
   margin: 0 0 0.5rem;
 }
 
-.lede {
-  margin: 0;
-  max-width: 52ch;
-  color: var(--muted);
-}
-
-.callout {
-  margin: 1rem 0 0;
-  max-width: 62ch;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  border: 1px solid var(--accent-border);
-  background: var(--accent-bg);
-  font-size: 0.9375rem;
-}
-
-.callout a {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.inline-code {
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 0.9em;
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-  background: var(--code-bg);
-  color: var(--text-h);
+.header {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--surface) 92%, var(--accent) 8%),
+    var(--surface)
+  );
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.1rem 1.2rem;
 }
 
 .banner {
@@ -111,6 +92,14 @@
   color: var(--text-h);
 }
 
+.positions-panel {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 95%, var(--accent) 5%),
+    var(--surface)
+  );
+}
+
 .chart-panel {
   position: relative;
 }
@@ -174,28 +163,56 @@
 }
 
 .table-wrap {
-  overflow-x: auto;
+  overflow: hidden;
   margin-bottom: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
 .holdings-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
+  table-layout: auto;
 }
 
 .holdings-table th {
   text-align: left;
   font-weight: 600;
   color: var(--muted);
-  padding: 0.5rem 0.65rem 0.65rem 0;
+  padding: 0.75rem 0.65rem 0.75rem 0;
   border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
 }
 
 .holdings-table td {
-  padding: 0.55rem 0.65rem 0.55rem 0;
+  padding: 0.72rem 0.65rem 0.72rem 0;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
+  white-space: nowrap;
+}
+
+.holdings-table th:first-child,
+.holdings-table td:first-child {
+  padding-left: 0.75rem;
+}
+
+.holdings-table th:last-child,
+.holdings-table td:last-child {
+  padding-right: 0.75rem;
+}
+
+.holdings-table tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--surface-elevated) 85%, transparent);
+}
+
+.holdings-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent-bg) 60%, transparent);
 }
 
 .holdings-table tr:last-child td {
@@ -206,6 +223,8 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+  white-space: nowrap;
 }
 
 .holdings-table .num {
@@ -213,11 +232,58 @@
   font-variant-numeric: tabular-nums;
 }
 
+.inline-input {
+  width: 92px;
+  font: inherit;
+  padding: 0.25rem 0.35rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-h);
+  text-align: right;
+}
+
+.inline-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.status-cell {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.18rem 0.5rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+  background: var(--surface-elevated);
+  font-weight: 600;
+}
+
+.pill.ok {
+  border-color: color-mix(in srgb, #22c55e 40%, var(--border));
+  color: #15803d;
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+}
+
 .add-form .form-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: flex-end;
+}
+
+.add-form .form-row-stock {
+  flex-wrap: nowrap;
+}
+
+.add-form .form-row-cash {
+  margin-top: 0.65rem;
 }
 
 .add-form label {
@@ -233,6 +299,11 @@
 .add-form .flex-symbol {
   flex: 1 1 120px;
   min-width: 6.5rem;
+}
+
+.add-form .flex-compact {
+  flex: 0 0 120px;
+  min-width: 120px;
 }
 
 .add-form input {
@@ -284,16 +355,22 @@
   font-size: 0.875rem;
 }
 
-.btn.ghost.danger {
+.btn.ghost {
   background: transparent;
-  color: var(--danger);
-  border-color: transparent;
-  padding: 0.25rem 0.45rem;
-  font-size: 0.8125rem;
+  color: var(--text-h);
+  border-color: var(--border);
+  padding: 0.3rem 0.52rem;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
-.btn.ghost.danger:hover {
-  background: var(--danger-bg);
+.btn.ghost:hover {
+  background: var(--surface-elevated);
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 0.35rem;
 }
 
 .muted {

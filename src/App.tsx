@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Cell,
   Legend,
@@ -12,6 +12,7 @@ import type { Holding } from './types'
 import './App.css'
 
 const STORAGE_KEY = 'holdings-viewer-data-v2'
+const CASH_STORAGE_KEY = 'holdings-viewer-cash-v1'
 
 const CHART_COLORS = [
   '#6366f1',
@@ -40,12 +41,15 @@ function makeId(): string {
 
 function normalizeRaw(h: Partial<Holding>): Holding {
   const rawShares = Number(h.shares)
-  const shares =
-    Number.isFinite(rawShares) && rawShares > 0 ? rawShares : NaN
+  const shares = Number.isFinite(rawShares) && rawShares > 0 ? rawShares : NaN
+  const rawAverageCost = Number(h.averageCost)
+  const averageCost =
+    Number.isFinite(rawAverageCost) && rawAverageCost >= 0 ? rawAverageCost : 0
   return {
     id: h.id ?? makeId(),
     symbol: String(h.symbol ?? '').trim().toUpperCase() || '?',
     shares: Number.isFinite(shares) ? shares : 1,
+    averageCost,
   }
 }
 
@@ -54,6 +58,12 @@ export default function App() {
   const [ready, setReady] = useState(false)
   const [symbol, setSymbol] = useState('')
   const [sharesStr, setSharesStr] = useState('')
+  const [avgCostStr, setAvgCostStr] = useState('')
+  const [cashStr, setCashStr] = useState('')
+  const [cashValue, setCashValue] = useState(0)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editSharesStr, setEditSharesStr] = useState('')
+  const [editAvgCostStr, setEditAvgCostStr] = useState('')
   const [quoteBySymbol, setQuoteBySymbol] = useState(
     () => new Map<string, { price: number; currency: string }>(),
   )
@@ -75,6 +85,19 @@ export default function App() {
       }
     }
 
+    const loadCash = localStorage.getItem(CASH_STORAGE_KEY)
+    if (loadCash) {
+      const parsedCash = Number(loadCash)
+      if (Number.isFinite(parsedCash) && parsedCash >= 0) {
+        setCashValue(parsedCash)
+        setCashStr(
+          parsedCash > 0
+            ? parsedCash.toLocaleString(undefined, { maximumFractionDigits: 2 })
+            : '',
+        )
+      }
+    }
+
     fetch('/holdings.json')
       .then((r) => r.json())
       .then((data: unknown) => {
@@ -90,6 +113,11 @@ export default function App() {
     if (!ready) return
     localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings))
   }, [holdings, ready])
+
+  useEffect(() => {
+    if (!ready) return
+    localStorage.setItem(CASH_STORAGE_KEY, String(cashValue))
+  }, [cashValue, ready])
 
   const quoteKey = useMemo(
     () =>
@@ -134,7 +162,7 @@ export default function App() {
   useEffect(() => {
     if (!ready || holdings.length === 0) return
     void refreshQuotes()
-  }, [ready, quoteKey, refreshQuotes])
+  }, [ready, quoteKey, refreshQuotes, holdings.length])
 
   const holdingValue = useCallback(
     (h: Holding) => {
@@ -156,15 +184,14 @@ export default function App() {
     return cur
   }, [holdings, quoteBySymbol])
 
-  const primaryCurrency =
-    currencyMix.size === 1 ? [...currencyMix][0]! : 'USD'
+  const primaryCurrency = currencyMix.size === 1 ? [...currencyMix][0]! : 'USD'
 
   const totalFmt = moneyFmt(primaryCurrency)
 
   const total = useMemo(() => {
     if (currencyMix.size > 1) return null
     let sum = 0
-    let any = false
+    let any = cashValue > 0
     for (const h of holdings) {
       const v = holdingValue(h)
       if (v != null) {
@@ -172,12 +199,13 @@ export default function App() {
         any = true
       }
     }
+    if (cashValue > 0) sum += cashValue
     return any ? sum : null
-  }, [holdings, holdingValue, currencyMix.size])
+  }, [holdings, holdingValue, currencyMix.size, cashValue])
 
   const chartData = useMemo(() => {
     if (currencyMix.size > 1) return []
-    return holdings
+    const rows = holdings
       .map((h) => {
         const v = holdingValue(h)
         if (v == null || v <= 0) return null
@@ -189,29 +217,77 @@ export default function App() {
         }
       })
       .filter((x): x is NonNullable<typeof x> => x != null)
-  }, [holdings, holdingValue, currencyMix.size])
+    if (cashValue > 0) {
+      rows.push({
+        key: 'cash',
+        name: 'Cash',
+        fullLabel: 'Cash',
+        value: cashValue,
+      })
+    }
+    return rows
+  }, [holdings, holdingValue, currencyMix.size, cashValue])
 
   const addHolding = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault()
+      const nextSymbol = symbol.trim()
       const shares = Number.parseFloat(sharesStr.replace(/,/g, ''))
-      if (!Number.isFinite(shares) || shares <= 0) return
+      const averageCost = Number.parseFloat(avgCostStr.replace(/,/g, ''))
+      if (!nextSymbol || !Number.isFinite(shares) || shares <= 0) return
+      if (!Number.isFinite(averageCost) || averageCost < 0) return
       setHoldings((prev) => [
         ...prev,
         normalizeRaw({
-          symbol: symbol.trim() || '?',
+          symbol: nextSymbol,
           shares,
+          averageCost,
         }),
       ])
       setSymbol('')
       setSharesStr('')
+      setAvgCostStr('')
     },
-    [symbol, sharesStr],
+    [symbol, sharesStr, avgCostStr],
   )
 
-  const removeHolding = useCallback((id: string) => {
-    setHoldings((prev) => prev.filter((h) => h.id !== id))
+  const saveCash = useCallback(() => {
+    if (cashStr.trim() === '') return
+    const parsedCash = Number.parseFloat(cashStr.replace(/,/g, ''))
+    if (!Number.isFinite(parsedCash) || parsedCash < 0) {
+      setCashValue(0)
+      setCashStr('')
+      return
+    }
+    setCashValue(parsedCash)
+    setCashStr(parsedCash.toLocaleString(undefined, { maximumFractionDigits: 2 }))
+  }, [cashStr])
+
+  const startEdit = useCallback((h: Holding) => {
+    setEditingId(h.id)
+    setEditSharesStr(String(h.shares))
+    setEditAvgCostStr(String(h.averageCost))
   }, [])
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null)
+    setEditSharesStr('')
+    setEditAvgCostStr('')
+  }, [])
+
+  const saveEdit = useCallback(
+    (id: string) => {
+      const shares = Number.parseFloat(editSharesStr.replace(/,/g, ''))
+      const averageCost = Number.parseFloat(editAvgCostStr.replace(/,/g, ''))
+      if (!Number.isFinite(shares) || shares <= 0) return
+      if (!Number.isFinite(averageCost) || averageCost < 0) return
+      setHoldings((prev) =>
+        prev.map((h) => (h.id === id ? { ...h, shares, averageCost } : h)),
+      )
+      cancelEdit()
+    },
+    [editSharesStr, editAvgCostStr, cancelEdit],
+  )
 
   const pieTooltip = useCallback(
     ({
@@ -251,26 +327,10 @@ export default function App() {
     )
   }
 
-  const finnhubConfigured = Boolean(import.meta.env.VITE_FINNHUB_API_KEY)
-
   return (
     <div className="app">
       <header className="header">
         <h1>Portfolio holdings</h1>
-        <p className="lede">
-          Enter symbols and share counts; values use live quotes when you refresh.
-          Quotes may be delayed (free data). Your list stays in this browser.
-        </p>
-        {!finnhubConfigured && (
-          <p className="callout">
-            For deployed sites, add a free{' '}
-            <a href="https://finnhub.io/register" target="_blank" rel="noreferrer">
-              Finnhub API key
-            </a>{' '}
-            as <code className="inline-code">VITE_FINNHUB_API_KEY</code> in your host
-            env (local dev uses a Yahoo proxy automatically).
-          </p>
-        )}
       </header>
 
       {quoteErrors.length > 0 && (
@@ -311,9 +371,7 @@ export default function App() {
                     paddingAngle={2}
                     label={({ name, percent }) => {
                       const pct =
-                        typeof percent === 'number'
-                          ? (percent * 100).toFixed(0)
-                          : '0'
+                        typeof percent === 'number' ? (percent * 100).toFixed(0) : '0'
                       return `${name} ${pct}%`
                     }}
                   >
@@ -334,9 +392,7 @@ export default function App() {
           )}
           <div className="total-bar">
             <span>Total</span>
-            <strong>
-              {total != null ? totalFmt.format(total) : '—'}
-            </strong>
+            <strong>{total != null ? totalFmt.format(total) : '—'}</strong>
           </div>
           {currencyMix.size > 1 && (
             <p className="muted footnote">
@@ -346,7 +402,7 @@ export default function App() {
           )}
         </section>
 
-        <section className="panel" aria-labelledby="list-heading">
+        <section className="panel positions-panel" aria-labelledby="list-heading">
           <div className="panel-head">
             <h2 id="list-heading">Positions</h2>
             <button
@@ -368,6 +424,9 @@ export default function App() {
                     Shares
                   </th>
                   <th scope="col" className="num">
+                    Avg cost
+                  </th>
+                  <th scope="col" className="num">
                     Price
                   </th>
                   <th scope="col" className="num">
@@ -376,18 +435,39 @@ export default function App() {
                   <th scope="col" className="num">
                     %
                   </th>
-                  <th scope="col"><span className="sr-only">Remove</span></th>
+                  <th scope="col">Quote</th>
+                  <th scope="col"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
+                {cashValue > 0 && (
+                  <tr>
+                    <td className="sym">CASH</td>
+                    <td className="num shares-cell">—</td>
+                    <td className="num">—</td>
+                    <td className="num">—</td>
+                    <td className="num">{totalFmt.format(cashValue)}</td>
+                    <td className="num">
+                      {total != null && total > 0
+                        ? ((cashValue / total) * 100).toFixed(1)
+                        : '—'}
+                      %
+                    </td>
+                    <td className="status-cell">
+                      <span className="pill ok">Cash</span>
+                    </td>
+                    <td></td>
+                  </tr>
+                )}
                 {holdings.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="muted">
+                    <td colSpan={7} className="muted">
                       No positions yet. Add one below.
                     </td>
                   </tr>
                 ) : (
                   holdings.map((h) => {
+                    const isEditing = editingId === h.id
                     const sym = h.symbol.trim().toUpperCase()
                     const q = quoteBySymbol.get(sym)
                     const rowVal = holdingValue(h)
@@ -400,26 +480,77 @@ export default function App() {
                       <tr key={h.id}>
                         <td className="sym">{h.symbol}</td>
                         <td className="num shares-cell">
-                          {h.shares.toLocaleString(undefined, {
-                            maximumFractionDigits: 6,
-                          })}
+                          {isEditing ? (
+                            <input
+                              className="inline-input"
+                              inputMode="decimal"
+                              value={editSharesStr}
+                              onChange={(e) => setEditSharesStr(e.target.value)}
+                              aria-label={`Edit shares for ${h.symbol}`}
+                            />
+                          ) : (
+                            h.shares.toLocaleString(undefined, {
+                              maximumFractionDigits: 6,
+                            })
+                          )}
                         </td>
                         <td className="num">
-                          {q ? rowMoney.format(q.price) : '—'}
+                          {isEditing ? (
+                            <input
+                              className="inline-input"
+                              inputMode="decimal"
+                              value={editAvgCostStr}
+                              onChange={(e) => setEditAvgCostStr(e.target.value)}
+                              aria-label={`Edit average cost for ${h.symbol}`}
+                            />
+                          ) : (
+                            rowMoney.format(h.averageCost)
+                          )}
                         </td>
+                        <td className="num">{q ? rowMoney.format(q.price) : '—'}</td>
                         <td className="num">
                           {rowVal != null ? rowMoney.format(rowVal) : '—'}
                         </td>
                         <td className="num">{pct}%</td>
+                        <td className="status-cell">
+                          {q ? (
+                            <span className="pill ok">Live</span>
+                          ) : (
+                            <span className="pill">No quote</span>
+                          )}
+                        </td>
                         <td>
-                          <button
-                            type="button"
-                            className="btn ghost danger"
-                            onClick={() => removeHolding(h.id)}
-                            aria-label={`Remove ${h.symbol}`}
-                          >
-                            Remove
-                          </button>
+                          <div className="row-actions">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn ghost"
+                                  onClick={() => saveEdit(h.id)}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn ghost"
+                                  onClick={cancelEdit}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn ghost"
+                                  onClick={() => startEdit(h)}
+                                  aria-label={`Edit ${h.symbol}`}
+                                >
+                                  Edit
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )
@@ -430,7 +561,7 @@ export default function App() {
           </div>
 
           <form className="add-form" onSubmit={addHolding}>
-            <div className="form-row">
+            <div className="form-row form-row-stock">
               <label className="flex-symbol">
                 Symbol
                 <input
@@ -440,7 +571,7 @@ export default function App() {
                   autoComplete="off"
                 />
               </label>
-              <label>
+              <label className="flex-compact">
                 Shares
                 <input
                   inputMode="decimal"
@@ -449,8 +580,31 @@ export default function App() {
                   placeholder="0"
                 />
               </label>
+              <label className="flex-compact">
+                Avg cost
+                <input
+                  inputMode="decimal"
+                  value={avgCostStr}
+                  onChange={(e) => setAvgCostStr(e.target.value)}
+                  placeholder="0"
+                />
+              </label>
               <button type="submit" className="btn primary">
-                Add
+                Add stock
+              </button>
+            </div>
+            <div className="form-row form-row-cash">
+              <label className="flex-symbol">
+                Cash
+                <input
+                  inputMode="decimal"
+                  value={cashStr}
+                  onChange={(e) => setCashStr(e.target.value)}
+                  placeholder="0"
+                />
+              </label>
+              <button type="button" className="btn primary" onClick={saveCash}>
+                Save cash
               </button>
             </div>
           </form>
@@ -459,3 +613,4 @@ export default function App() {
     </div>
   )
 }
+
